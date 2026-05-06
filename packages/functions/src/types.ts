@@ -6,6 +6,7 @@ import {
   METRICS_RANGES,
   OidcProviderInputZod,
   SttProviderInputZod,
+  TenantRoleZod,
   Term,
   TermZod,
   Tone,
@@ -32,6 +33,10 @@ import {
   type OidcProviderInput,
   type SttProvider,
   type SttProviderInput,
+  type Tenant,
+  type TenantInvitation,
+  type TenantMembership,
+  type TenantRole,
   type User,
   type UserWithAuth,
 } from "@voquill/types";
@@ -467,6 +472,66 @@ type HandlerDefinitions = {
       perProvider: MetricsPerProvider[];
     };
   };
+
+  // tenants
+  "tenant/listMine": {
+    input: EmptyObject;
+    output: {
+      tenants: { tenant: Tenant; role: TenantRole; hasSeat: boolean }[];
+    };
+  };
+  "tenant/create": {
+    input: { name: string };
+    output: { tenant: Tenant };
+  };
+  "tenant/rename": {
+    input: { tenantId: string; name: string };
+    output: { tenant: Tenant };
+  };
+  "tenant/delete": {
+    input: { tenantId: string };
+    output: EmptyObject;
+  };
+
+  // memberships (all scoped by tenantId in the input)
+  "membership/list": {
+    input: { tenantId: string };
+    output: { memberships: TenantMembership[] };
+  };
+  "membership/changeRole": {
+    input: { tenantId: string; userId: string; role: TenantRole };
+    output: EmptyObject;
+  };
+  "membership/remove": {
+    input: { tenantId: string; userId: string };
+    output: EmptyObject;
+  };
+  "membership/assignSeat": {
+    input: { tenantId: string; userId: string };
+    output: EmptyObject;
+  };
+  "membership/revokeSeat": {
+    input: { tenantId: string; userId: string };
+    output: EmptyObject;
+  };
+
+  // invitations
+  "invitation/create": {
+    input: { tenantId: string; email: string; role: TenantRole };
+    output: { invitation: TenantInvitation; token: string };
+  };
+  "invitation/listPending": {
+    input: { tenantId: string };
+    output: { invitations: TenantInvitation[] };
+  };
+  "invitation/revoke": {
+    input: { tenantId: string; invitationId: string };
+    output: EmptyObject;
+  };
+  "invitation/accept": {
+    input: { token: string };
+    output: { tenantId: string };
+  };
 };
 
 export type HandlerName = keyof HandlerDefinitions;
@@ -698,6 +763,90 @@ export const TryExtendTrialInputZod = z
     memberId: z.string().min(1),
   })
   .strict() satisfies z.ZodType<HandlerInput<"emulator/tryExtendTrial">>;
+
+// tenants
+export const TenantCreateInputZod = z
+  .object({
+    name: z.string().trim().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"tenant/create">>;
+
+export const TenantRenameInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    name: z.string().trim().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"tenant/rename">>;
+
+export const TenantDeleteInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"tenant/delete">>;
+
+// memberships
+export const MembershipListInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"membership/list">>;
+
+export const MembershipChangeRoleInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    userId: z.string().min(1),
+    role: TenantRoleZod,
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"membership/changeRole">>;
+
+export const MembershipRemoveInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    userId: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"membership/remove">>;
+
+export const MembershipAssignSeatInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    userId: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"membership/assignSeat">>;
+
+export const MembershipRevokeSeatInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    userId: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"membership/revokeSeat">>;
+
+// invitations
+export const InvitationCreateInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    email: z.string().email(),
+    role: TenantRoleZod,
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"invitation/create">>;
+
+export const InvitationListPendingInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"invitation/listPending">>;
+
+export const InvitationRevokeInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    invitationId: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"invitation/revoke">>;
+
+export const InvitationAcceptInputZod = z
+  .object({
+    token: z.string().min(1),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"invitation/accept">>;
 
 type StreamHandlerDefinitions = {
   "ai/streamChat": {
