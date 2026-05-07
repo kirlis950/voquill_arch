@@ -37,12 +37,12 @@ export const Prices: Record<PriceKey, PriceInfo> = {
     prodId: "price_1SmiviIp7DaYKUgMlbjqI23J",
   },
   team_monthly: {
-    sandboxId: "",
+    sandboxId: "price_1TUHWeRRNItZsxS6JLOIaLxc",
     devId: "",
     prodId: "price_1TUFS9Ip7DaYKUgMPORdfzQr",
   },
   team_yearly: {
-    sandboxId: "",
+    sandboxId: "price_1TUHWnRRNItZsxS6YS0MGEw8",
     devId: "",
     prodId: "price_1TUFTAIp7DaYKUgMYQbk4u6A",
   },
