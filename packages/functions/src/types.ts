@@ -361,6 +361,14 @@ type HandlerDefinitions = {
       url: string;
     };
   };
+  "stripe/updateTenantSubscription": {
+    input: {
+      tenantId: string;
+      priceId: string;
+      quantity: number;
+    };
+    output: EmptyObject;
+  };
 
   // stt providers
   "sttProvider/list": {
@@ -636,6 +644,14 @@ export const StripeCreateTenantCustomerPortalSessionInputZod = z
     tenantId: z.string().min(1),
   })
   .strict() satisfies z.ZodType<HandlerInput<"stripe/createTenantCustomerPortalSession">>;
+
+export const StripeUpdateTenantSubscriptionInputZod = z
+  .object({
+    tenantId: z.string().min(1),
+    priceId: z.string().min(1),
+    quantity: z.number().int().positive(),
+  })
+  .strict() satisfies z.ZodType<HandlerInput<"stripe/updateTenantSubscription">>;
 
 export const SetMyUserInputZod = z
   .object({
