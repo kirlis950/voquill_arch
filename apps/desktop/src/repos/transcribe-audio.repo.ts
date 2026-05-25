@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { invokeHandler } from "@voquill/functions";
 import { Nullable } from "@voquill/types";
 import { batchAsync } from "@voquill/utilities";
@@ -59,6 +60,7 @@ export type TranscribeAudioInput = {
   sampleRate: number;
   prompt?: Nullable<string>;
   language?: string;
+  locale?: string;
 };
 
 export type TranscribeAudioOutput = {
@@ -71,6 +73,7 @@ export type TranscribeSegmentInput = {
   sampleRate: number;
   prompt?: Nullable<string>;
   language?: string;
+  locale?: string;
 };
 
 export abstract class BaseTranscribeAudioRepo extends BaseRepo {
@@ -126,6 +129,7 @@ export abstract class BaseTranscribeAudioRepo extends BaseRepo {
         sampleRate: input.sampleRate,
         prompt: input.prompt,
         language: input.language,
+        locale: input.locale,
       });
     }
 
@@ -145,6 +149,7 @@ export abstract class BaseTranscribeAudioRepo extends BaseRepo {
           sampleRate: input.sampleRate,
           prompt: input.prompt,
           language: input.language,
+          locale: input.locale,
         }),
     );
 
@@ -216,6 +221,52 @@ export class LocalTranscribeAudioRepo extends BaseTranscribeAudioRepo {
         inferenceDevice: output.inferenceDevice,
         modelSize: output.model,
         transcriptionMode: "local",
+      },
+    };
+  }
+}
+
+type AppleSpeechTranscribeResponse = {
+  text: string;
+  model: string;
+  inferenceDevice: string;
+};
+
+export class AppleSpeechTranscribeAudioRepo extends BaseTranscribeAudioRepo {
+  protected getSegmentDurationSec(): number {
+    return 60;
+  }
+
+  protected getOverlapDurationSec(): number {
+    return 5;
+  }
+
+  protected getBatchChunkCount(): number {
+    return 1;
+  }
+
+  protected async transcribeSegment(
+    input: TranscribeSegmentInput,
+  ): Promise<TranscribeAudioOutput> {
+    const entries = collectDictionaryEntries(getAppState());
+    const output = await invoke<AppleSpeechTranscribeResponse>(
+      "apple_speech_transcribe",
+      {
+        args: {
+          samples: Array.from(input.samples),
+          sampleRate: input.sampleRate,
+          language: input.locale ?? input.language,
+          contextualStrings: entries.sources,
+        },
+      },
+    );
+
+    return {
+      text: output.text,
+      metadata: {
+        inferenceDevice: output.inferenceDevice,
+        modelSize: output.model,
+        transcriptionMode: "apple-speech",
       },
     };
   }

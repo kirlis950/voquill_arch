@@ -31,6 +31,7 @@ fn main() {
         remote_sender_pair_with_receiver,
         start_recording,
         stop_recording,
+        apple_speech_transcribe,
         store_transcription_audio,
         storage_upload_data,
         storage_get_download_url,

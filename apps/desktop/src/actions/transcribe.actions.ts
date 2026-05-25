@@ -138,6 +138,7 @@ export const transcribeAudio = async ({
     sampleRate,
     prompt: transcriptionPrompt,
     language: whisperLanguage,
+    locale: dictationLanguage === "auto" ? undefined : dictationLanguage,
   });
   const transcribeDuration = performance.now() - transcribeStart;
   const rawTranscript = transcribeOutput.text.trim();

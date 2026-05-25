@@ -31,6 +31,7 @@ import {
 } from "../../state/settings.state";
 import { useAppStore } from "../../store";
 import { CPU_DEVICE_VALUE, type TranscriptionMode } from "../../types/ai.types";
+import { isAppleSpeechTranscriptionSupported } from "../../utils/apple-speech-transcription.utils";
 import { getAllowsChangeTranscription } from "../../utils/enterprise.utils";
 import { getEffectiveTranscriptionMode } from "../../utils/user.utils";
 import { formatSize } from "../../utils/format.utils";
@@ -130,6 +131,7 @@ export const AITranscriptionConfiguration = ({
   const effectiveMode = useAppStore(getEffectiveTranscriptionMode);
   const allowChange = useAppStore(getAllowsChangeTranscription);
   const localTranscriptionConfig = transcription.localModelManagement;
+  const appleSpeechAvailable = isAppleSpeechTranscriptionSupported();
 
   const hasSelectedDevice = transcription.availableDevices.some(
     (device) => device.id === transcription.device,
@@ -278,7 +280,11 @@ export const AITranscriptionConfiguration = ({
             ],
           ),
           { value: "api", label: "API" },
-          { value: "local", label: "Local" },
+          { value: "local", label: "Whisper" },
+          ...maybeArrayElements<SegmentedControlOption<TranscriptionMode>>(
+            appleSpeechAvailable,
+            [{ value: "apple-speech", label: "Apple Speech" }],
+          ),
         ]}
         ariaLabel="Processing mode"
       />

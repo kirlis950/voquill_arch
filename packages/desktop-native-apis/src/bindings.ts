@@ -201,6 +201,14 @@ async stopRecording() : Promise<Result<StopRecordingResponse, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async appleSpeechTranscribe(args: AppleSpeechTranscribeArgs) : Promise<Result<AppleSpeechTranscribeResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apple_speech_transcribe", { args }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async storeTranscriptionAudio(id: string, samples: number[], sampleRate: number) : Promise<Result<TranscriptionAudioSnapshot, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("store_transcription_audio", { id, samples, sampleRate }) };
@@ -947,6 +955,8 @@ bundleId?: string | null }
 export type AppProcessMatch = { pid: number; exePath: string | null; appName: string | null; windowTitle: string | null }
 export type AppTarget = { id: string; name: string; createdAt: string; toneId: string | null; iconPath: string | null; pasteKeybind?: string | null; insertionMethod?: string | null; typingSpeedMs?: number | null }
 export type AppTargetUpsertArgs = { id: string; name: string; toneId?: string | null; iconPath?: string | null; pasteKeybind?: string | null; insertionMethod?: string | null; typingSpeedMs?: number | null }
+export type AppleSpeechTranscribeArgs = { samples: number[]; sampleRate: number; language?: string | null; contextualStrings?: string[] }
+export type AppleSpeechTranscribeResponse = { text: string; model: string; inferenceDevice: string }
 export type AudioClip = "start_recording_clip" | "stop_recording_clip" | "alert_linux_clip" | "alert_macos_clip" | "alert_windows_10_clip" | "alert_windows_11_clip"
 export type ChatMessage = { id: string; conversationId: string; role: string; content: string; createdAt: number; metadata: string | null }
 export type CompositorBinding = { actionName: string; keys: string[] }

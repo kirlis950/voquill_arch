@@ -18,6 +18,7 @@ import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { createTranscriptionSession } from "../sessions";
 import type { AppState } from "../state/app.state";
 import { applyAiPreferences } from "./ai.utils";
+import { isAppleSpeechTranscriptionSupported } from "./apple-speech-transcription.utils";
 import { registerUsers } from "./app.utils";
 import {
   getAllowsChangePostProcessing,
@@ -67,7 +68,11 @@ const resolveMode = <T extends string>(
 export const getEffectiveTranscriptionMode = (
   state: AppState,
 ): TranscriptionMode => {
-  return resolveMode(state, state.settings.aiTranscription.mode, "local");
+  const mode = resolveMode(state, state.settings.aiTranscription.mode, "local");
+  if (mode === "apple-speech" && !isAppleSpeechTranscriptionSupported()) {
+    return "local";
+  }
+  return mode;
 };
 
 export const getEffectivePostProcessingMode = (
@@ -210,6 +215,10 @@ export type LocalTranscriptionPrefs = BaseTranscriptionPrefs & {
   transcriptionModelSize: string | null;
 };
 
+export type AppleSpeechTranscriptionPrefs = BaseTranscriptionPrefs & {
+  mode: "apple-speech";
+};
+
 export type ApiTranscriptionPrefs = BaseTranscriptionPrefs & {
   mode: "api";
   provider: ApiKeyProvider;
@@ -221,6 +230,7 @@ export type ApiTranscriptionPrefs = BaseTranscriptionPrefs & {
 export type TranscriptionPrefs =
   | CloudTranscriptionPrefs
   | LocalTranscriptionPrefs
+  | AppleSpeechTranscriptionPrefs
   | ApiTranscriptionPrefs;
 
 export const getTranscriptionPrefs = (state: AppState): TranscriptionPrefs => {
@@ -265,6 +275,13 @@ export const getTranscriptionPrefs = (state: AppState): TranscriptionPrefs => {
     } else {
       warnings.push("No API key configured for API transcription.");
     }
+  }
+
+  if (mode === "apple-speech") {
+    return {
+      mode,
+      warnings,
+    };
   }
 
   return {

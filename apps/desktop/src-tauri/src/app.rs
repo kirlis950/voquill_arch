@@ -80,29 +80,24 @@ pub fn build() -> tauri::Builder<tauri::Wry> {
         )
         .on_window_event(|window, event| {
             match event {
-                WindowEvent::CloseRequested { api, .. } => {
-                    if window.label() == "main" {
-                        api.prevent_close();
-                        let _ = window
-                            .app_handle()
-                            .save_window_state(StateFlags::SIZE | StateFlags::POSITION);
-                        let _ = window.hide();
-                        // On Windows, force the WebView to stay active after hiding the window
-                        // so that background JS (global hotkey detection via keys_held events)
-                        // continues running while the app is minimized to the system tray.
-                        #[cfg(target_os = "windows")]
-                        {
-                            crate::platform::window::keep_webview_active(
-                                window.app_handle(),
-                                "main",
-                            );
-                            crate::platform::window::set_webview_keepalive(true);
-                        }
-                        #[cfg(target_os = "macos")]
-                        {
-                            if let Err(err) = crate::platform::macos::dock::hide_dock_icon() {
-                                log::error!("Failed to hide dock icon: {err}");
-                            }
+                WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                    api.prevent_close();
+                    let _ = window
+                        .app_handle()
+                        .save_window_state(StateFlags::SIZE | StateFlags::POSITION);
+                    let _ = window.hide();
+                    // On Windows, force the WebView to stay active after hiding the window
+                    // so that background JS (global hotkey detection via keys_held events)
+                    // continues running while the app is minimized to the system tray.
+                    #[cfg(target_os = "windows")]
+                    {
+                        crate::platform::window::keep_webview_active(window.app_handle(), "main");
+                        crate::platform::window::set_webview_keepalive(true);
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Err(err) = crate::platform::macos::dock::hide_dock_icon() {
+                            log::error!("Failed to hide dock icon: {err}");
                         }
                     }
                 }
@@ -247,6 +242,7 @@ pub fn build() -> tauri::Builder<tauri::Wry> {
             crate::commands::remote_sender_pair_with_receiver,
             crate::commands::start_recording,
             crate::commands::stop_recording,
+            crate::commands::apple_speech_transcribe,
             crate::commands::store_transcription_audio,
             crate::commands::storage_upload_data,
             crate::commands::storage_get_download_url,

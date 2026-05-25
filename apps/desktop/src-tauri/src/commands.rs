@@ -27,6 +27,25 @@ pub struct StopRecordingResponse {
     pub sample_rate: u32,
 }
 
+#[derive(serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppleSpeechTranscribeArgs {
+    pub samples: Vec<f32>,
+    pub sample_rate: u32,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub contextual_strings: Vec<String>,
+}
+
+#[derive(serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppleSpeechTranscribeResponse {
+    pub text: String,
+    pub model: String,
+    pub inference_device: String,
+}
+
 #[derive(serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct StartRecordingResponse {
@@ -1390,6 +1409,35 @@ pub async fn stop_recording(
     })
     .await
     .map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn apple_speech_transcribe(
+    args: AppleSpeechTranscribeArgs,
+) -> Result<AppleSpeechTranscribeResponse, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let text = crate::platform::macos::speech::transcribe_audio(
+            args.samples,
+            args.sample_rate,
+            args.language,
+            args.contextual_strings,
+        )
+        .await?;
+
+        Ok(AppleSpeechTranscribeResponse {
+            text,
+            model: "Apple Speech".to_string(),
+            inference_device: "macOS Speech (On-Device)".to_string(),
+        })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = args;
+        Err("Apple Speech transcription is only available on macOS.".to_string())
+    }
 }
 
 #[tauri::command]

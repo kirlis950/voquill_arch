@@ -83,6 +83,9 @@ export const TranscriptionDetailsDialog = () => {
     if (transcription?.transcriptionMode === "local") {
       return <FormattedMessage defaultMessage="Local" />;
     }
+    if (transcription?.transcriptionMode === "apple-speech") {
+      return <FormattedMessage defaultMessage="Apple Speech" />;
+    }
     return <FormattedMessage defaultMessage="Unknown" />;
   }, [transcription?.transcriptionMode]);
 
