@@ -10,7 +10,5 @@
   <true/>
   <key>com.apple.security.personal-information.accessibility</key>
   <true/>
-  <key>com.apple.security.personal-information.speech-recognition</key>
-  <true/>
 </dict>
 </plist>

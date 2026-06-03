@@ -8,7 +8,7 @@ export const MAX_DICTATION_LIMIT_MINUTES = Math.floor(MAX_TIMEOUT_MS / 60_000);
 
 export const shouldEnableDictationLimit = (
   mode: TranscriptionMode | null | undefined,
-): boolean => mode === "api" || mode === "local" || mode === "apple-speech";
+): boolean => mode === "api" || mode === "local";
 
 export const normalizeDictationLimitMinutes = (
   value: number | null | undefined,

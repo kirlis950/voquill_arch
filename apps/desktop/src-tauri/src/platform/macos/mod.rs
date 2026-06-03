@@ -9,7 +9,6 @@ pub mod monitor;
 pub mod overlay;
 pub mod permissions;
 pub mod position;
-pub mod speech;
 pub mod volume;
 pub mod window;
 

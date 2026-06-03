@@ -29,8 +29,6 @@ const formatModeLabel = (mode: string | null | undefined): React.ReactNode => {
   if (mode === "cloud")
     return <FormattedMessage defaultMessage="Voquill Cloud" />;
   if (mode === "local") return <FormattedMessage defaultMessage="Local" />;
-  if (mode === "apple-speech")
-    return <FormattedMessage defaultMessage="Apple Speech" />;
   return <FormattedMessage defaultMessage="Unknown" />;
 };
 

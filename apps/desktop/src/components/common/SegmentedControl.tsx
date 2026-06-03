@@ -67,13 +67,12 @@ export const SegmentedControl = <Value extends string>({
   return (
     <Box
       sx={{
-        display: "flex",
+        display: "inline-flex",
         bgcolor: "action.hover",
         borderRadius: 2,
         p: 0.5,
         border: 1,
         borderColor: "divider",
-        overflow: "hidden",
         maxWidth: "100%",
       }}
     >
@@ -81,12 +80,8 @@ export const SegmentedControl = <Value extends string>({
         value={activeIndex}
         onChange={handleChange}
         aria-label={ariaLabel}
-        variant="scrollable"
-        scrollButtons="auto"
-        allowScrollButtonsMobile
         sx={{
           minHeight: "unset",
-          maxWidth: "100%",
           "& .MuiTabs-indicator": {
             display: "none",
           },
