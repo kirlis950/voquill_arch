@@ -1,0 +1,197 @@
+name: Build Voquill Desktop for Arch Linux
+
+on:
+  workflow_dispatch:        # Käsitsi käivitamine "Actions" tabist
+  push:
+    branches: [main]
+
+permissions:
+  contents: write            # Vajalik release'i loomiseks
+
+jobs:
+  build-arch:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      # ----------------------------------------------------------------
+      # 1. Süsteemi sõltuvused (Arch vasted voquill/voquill setup-linux.sh-st
+      #    + .github/scripts/install-desktop-linux-deps.sh Ubuntu nimekirjast)
+      # ----------------------------------------------------------------
+      - name: Süsteemi sõltuvuste paigaldamine (pacman)
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel \
+            git \
+            curl \
+            wget \
+            file \
+            openssl \
+            pkgconf \
+            cmake \
+            clang \
+            dbus \
+            gtk3 \
+            webkit2gtk-4.1 \
+            libappindicator-gtk3 \
+            librsvg \
+            alsa-lib \
+            libxkbcommon \
+            libunwind \
+            xdotool \
+            gtk-layer-shell \
+            gstreamer \
+            gst-plugins-base \
+            gst-plugins-good \
+            gst-plugins-bad \
+            patchelf \
+            fuse2 \
+            wtype \
+            rpm-tools \
+            vulkan-icd-loader \
+            vulkan-headers \
+            vulkan-tools \
+            shaderc \
+            jq \
+            unzip
+
+      # ----------------------------------------------------------------
+      # 2. Node (.nvmrc nõuab v24), pnpm ja Bun (CI kasutab 1.3.6)
+      # ----------------------------------------------------------------
+      - name: pnpm seadistamine
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+
+      - name: Node.js seadistamine (v24)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Bun seadistamine
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.6"
+
+      - name: Rust toolchaini seadistamine
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Rust versiooni kontroll
+        run: |
+          source "$HOME/.cargo/env"
+          rustc --version
+          cargo --version
+
+      # ----------------------------------------------------------------
+      # 3. Repo checkout
+      # ----------------------------------------------------------------
+      - name: Repo kloonimine
+        uses: actions/checkout@v4
+
+      - name: Git turvaseade konteineri jaoks
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Diagnostika - struktuuri kontroll
+        run: |
+          echo "Praegune kataloog: $(pwd)"
+          echo "--- Juur ---"
+          ls -la
+          echo "--- apps/desktop olemas? ---"
+          ls -la apps/desktop/ | head -20
+          echo "--- versioonid ---"
+          node --version
+          pnpm --version
+          bun --version
+          echo "--- .nvmrc ---"
+          cat .nvmrc || true
+
+      # ----------------------------------------------------------------
+      # 4. Sõltuvuste paigaldamine (pnpm, kogu monorepo)
+      # ----------------------------------------------------------------
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      # ----------------------------------------------------------------
+      # 5. Turbo build desktop workspace (frontend + sidecar'id)
+      # ----------------------------------------------------------------
+      - name: Turbo build desktop
+        env:
+          TAURI_PLATFORM: linux
+          VOQUILL_DESKTOP_PLATFORM: linux
+          # GPU sidecar nõuab Vulkanit; kui tahad lihtsamat CPU-buildi, sea false
+          VOQUILL_REQUIRE_GPU_SIDECAR: "false"
+        run: |
+          source "$HOME/.cargo/env"
+          pnpm exec turbo run build --filter=desktop...
+
+      # ----------------------------------------------------------------
+      # 6. Tauri bundle (loob .deb/.rpm/.AppImage apps/desktop alla)
+      #    Kasutame dev-flavor konfiguratsiooni (ei vaja signeerimisvõtmeid)
+      # ----------------------------------------------------------------
+      - name: Tauri build (bundle)
+        env:
+          TAURI_PLATFORM: linux
+          VOQUILL_DESKTOP_PLATFORM: linux
+          VOQUILL_REQUIRE_GPU_SIDECAR: "false"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          FLAVOR: dev
+          VITE_FLAVOR: dev
+          VOQUILL_BUILD_FLAVOR: dev
+          VOQUILL_DESKTOP_FLAVOR: dev
+        run: |
+          source "$HOME/.cargo/env"
+          cd apps/desktop
+          pnpm tauri build --config src-tauri/tauri.dev.conf.json
+
+      # ----------------------------------------------------------------
+      # 7. Build väljundi leidmine
+      # ----------------------------------------------------------------
+      - name: Build väljundi kontroll
+        run: |
+          echo "Otsin bundle väljundeid..."
+          find . -type d -name bundle 2>/dev/null
+          find . -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) 2>/dev/null
+
+      # ----------------------------------------------------------------
+      # 8. Väljundite kogumine release-assets kausta
+      # ----------------------------------------------------------------
+      - name: Failide kogumine
+        run: |
+          mkdir -p release-assets
+          # Kopeerime kõik installer-tüüpi failid
+          find . -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) \
+            -exec cp {} release-assets/ \; 2>/dev/null || true
+          echo "Kogutud failid:"
+          ls -la release-assets/ || echo "Ühtegi paketifaili ei leitud!"
+
+      - name: Release tag'i määramine
+        id: vars
+        run: |
+          # Versioon root package.json-st kui olemas, muidu kuupäev
+          PKG_VERSION=$(node -p "require('./apps/desktop/package.json').version || '0.0.0'" 2>/dev/null || echo "0.0.0")
+          TAG="arch-v${PKG_VERSION}-${GITHUB_RUN_NUMBER}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${TAG}"
+
+      # ----------------------------------------------------------------
+      # 9. GitHub Release
+      # ----------------------------------------------------------------
+      - name: GitHub Release'i loomine
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: "Voquill Desktop Arch build ${{ steps.vars.outputs.tag }}"
+          body: |
+            Automaatne Arch Linuxi build (voquill/voquill desktop, dev-flavor).
+            Ehitatud archlinux:latest konteineris.
+            Commit: ${{ github.sha }}
+
+            NB: dev-flavor build, allkirjastamata. Vajab pacman-i sõltuvusi:
+            webkit2gtk-4.1, gtk3, alsa-lib, gstreamer, libappindicator-gtk3, vulkan-icd-loader.
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
