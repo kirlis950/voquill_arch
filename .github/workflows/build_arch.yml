@@ -65,6 +65,14 @@ jobs:
         run: pnpm exec turbo run build --filter=desktop...
 
       - name: Tauri build (.deb bundle)
+        # continue-on-error: build toodab paketid edukalt, aga tauri updater
+        # katkestab lõpus vea-koodiga, sest privaatset allkirjavõtit pole.
+        # Failid on siiski olemas - kontrollime neid järgmises sammus.
+        continue-on-error: true
+        env:
+          # Tühi väärtus => tauri ei proovi updater-artefakte allkirjastada
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           cd apps/desktop
           pnpm tauri build --config src-tauri/tauri.dev.conf.json
@@ -73,13 +81,19 @@ jobs:
         run: |
           mkdir -p build-output
           echo "--- otsin bundle väljundeid ---"
-          find . -type f \( -name "*.deb" -o -name "*.AppImage" \) 2>/dev/null
+          find . -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) 2>/dev/null
           # Kopeerime .deb (Arch pakendamise allikas)
           find . -type f -name "*.deb" -exec cp {} build-output/ \; 2>/dev/null || true
           # AppImage varuvariandina
           find . -type f -name "*.AppImage" -exec cp {} build-output/ \; 2>/dev/null || true
           echo "--- kogutud ---"
           ls -la build-output/
+          # Kontrollime, et .deb ikka tekkis (muidu peatame siin selge veaga)
+          if ! ls build-output/*.deb >/dev/null 2>&1; then
+            echo "VIGA: .deb faili ei toodetud - build kukkus tegelikult enne pakendamist."
+            exit 1
+          fi
+          echo "OK: .deb on olemas."
 
       - name: Laadi build artefaktiks (etapp 2 jaoks)
         uses: actions/upload-artifact@v4
@@ -135,48 +149,47 @@ jobs:
           echo "Kasutan deb-i: $DEB"
           cp "$DEB" /home/builder/pkg/voquill.deb
 
-          # Versioon tauri baaskonfist (0.1.0); kui run-number lisame pkgrel'iks
           PKGVER="0.1.0"
 
-          cat > /home/builder/pkg/PKGBUILD << PKGEOF
-          # Maintainer: kirlis950
-          pkgname=voquill-desktop-dev
-          pkgver=${PKGVER}
-          pkgrel=${GITHUB_RUN_NUMBER}
-          pkgdesc="Voquill - AI voice dictation (dev-flavor, repackaged from upstream .deb)"
-          arch=('x86_64')
-          url="https://github.com/voquill/voquill"
-          license=('AGPL3')
-          # Runtime sõltuvused (mappitud Ubuntu deps -> Arch)
-          depends=(
-            'webkit2gtk-4.1'
-            'gtk3'
-            'libappindicator-gtk3'
-            'librsvg'
-            'alsa-lib'
-            'gstreamer'
-            'gst-plugins-base'
-            'gst-plugins-good'
-            'openssl'
-            'libxdo'
-            'vulkan-icd-loader'
-          )
-          optdepends=(
-            'wtype: Wayland teksti sisestus'
-            'xdotool: X11 teksti sisestus'
-          )
-          provides=('voquill')
-          options=('!strip' '!debug')
-          source=('voquill.deb')
-          sha256sums=('SKIP')
-
-          package() {
-            cd "\$srcdir"
-            # Ekstrakti deb ar-arhiiv
-            ar x voquill.deb
-            # data.tar.* sisaldab tegelikke faile (/usr/...)
-            bsdtar -xf data.tar.* -C "\$pkgdir/"
-          }
+          # Kirjutame PKGBUILD-i ilma YAML-taandeta.
+          # 'PKGEOF' jutumärkides => bash EI interpoleeri; muutujad asendame envsubst'iga hiljem.
+          # Lihtsam: kasutame sed'i, et eemaldada iga rea algusest taane (märgis '|').
+          sed 's/^|//' > /home/builder/pkg/PKGBUILD << PKGEOF
+          |# Maintainer: kirlis950
+          |pkgname=voquill-desktop-dev
+          |pkgver=${PKGVER}
+          |pkgrel=${GITHUB_RUN_NUMBER}
+          |pkgdesc="Voquill - AI voice dictation (dev-flavor, repackaged from upstream .deb)"
+          |arch=('x86_64')
+          |url="https://github.com/voquill/voquill"
+          |license=('AGPL3')
+          |depends=(
+          |  'webkit2gtk-4.1'
+          |  'gtk3'
+          |  'libappindicator-gtk3'
+          |  'librsvg'
+          |  'alsa-lib'
+          |  'gstreamer'
+          |  'gst-plugins-base'
+          |  'gst-plugins-good'
+          |  'openssl'
+          |  'libxdo'
+          |  'vulkan-icd-loader'
+          |)
+          |optdepends=(
+          |  'wtype: Wayland teksti sisestus'
+          |  'xdotool: X11 teksti sisestus'
+          |)
+          |provides=('voquill')
+          |options=('!strip' '!debug')
+          |source=('voquill.deb')
+          |sha256sums=('SKIP')
+          |
+          |package() {
+          |  cd "\$srcdir"
+          |  ar x voquill.deb
+          |  bsdtar -xf data.tar.* -C "\$pkgdir/"
+          |}
           PKGEOF
 
           chown -R builder:builder /home/builder/pkg
