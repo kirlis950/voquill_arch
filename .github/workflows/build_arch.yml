@@ -173,12 +173,11 @@ jobs:
           |  'gst-plugins-base'
           |  'gst-plugins-good'
           |  'openssl'
-          |  'libxdo'
+          |  'xdotool'
           |  'vulkan-icd-loader'
           |)
           |optdepends=(
           |  'wtype: Wayland teksti sisestus'
-          |  'xdotool: X11 teksti sisestus'
           |)
           |provides=('voquill')
           |options=('!strip' '!debug')
