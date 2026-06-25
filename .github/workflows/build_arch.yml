@@ -1,4 +1,4 @@
-name: Build & Package Voquill for Arch
+name: Build & Package Voquill (PROD) for Arch
 
 on:
   workflow_dispatch:
@@ -11,21 +11,22 @@ permissions:
 jobs:
   # =================================================================
   # 1. ETAPP: Ehitus Ubuntul (ubuntu-22.04 - sama mis upstream CI).
-  #    Arch'i konteineris whisper-rs-sys ei kompileeru liiga uue
-  #    glibc/clang tõttu, seega ehitame siin ja toodame .deb-i.
+  #    PRODUCTION flavor: ühendub päris Voquill pilve backendiga.
   # =================================================================
   build-ubuntu:
-    name: Build on Ubuntu
+    name: Build on Ubuntu (prod)
     runs-on: ubuntu-22.04
     env:
       TAURI_PLATFORM: linux
       VOQUILL_DESKTOP_PLATFORM: linux
       VOQUILL_REQUIRE_GPU_SIDECAR: "false"
       APPIMAGE_EXTRACT_AND_RUN: "1"
-      FLAVOR: dev
-      VITE_FLAVOR: dev
-      VOQUILL_BUILD_FLAVOR: dev
-      VOQUILL_DESKTOP_FLAVOR: dev
+      # Tühjad allkirjavõtmed - updater ei proovi allkirjastada (meil pole privaatvõtit)
+      TAURI_SIGNING_PRIVATE_KEY: ""
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+      # Google OAuth credentials (PROD) - need on upstream koodis avalikud
+      VOQUILL_GOOGLE_CLIENT_ID: "777461284594-dhgao2eek53ppl4o188ik2i9cigdcmnp.apps.googleusercontent.com"
+      VOQUILL_GOOGLE_CLIENT_SECRET: "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"
     steps:
       - name: Repo kloonimine
         uses: actions/checkout@v4
@@ -33,7 +34,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node (.nvmrc -> v24)
+      - name: Setup Node (.nvmrc)
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -61,41 +62,41 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
+      # Sea productName/mainBinaryName = voquill-desktop (nagu CI prod teeb)
+      - name: Sea prod paketinimi konfis
+        run: |
+          cfg="apps/desktop/src-tauri/tauri.prod.conf.json"
+          tmp=$(mktemp)
+          jq --arg name "voquill-desktop" '.productName = $name | .mainBinaryName = $name' "$cfg" > "$tmp"
+          mv "$tmp" "$cfg"
+          echo "--- uuendatud konf ---"
+          jq '.productName, .mainBinaryName' "$cfg"
+
       - name: Turbo build desktop
         run: pnpm exec turbo run build --filter=desktop...
 
-      - name: Tauri build (.deb bundle)
-        # continue-on-error: build toodab paketid edukalt, aga tauri updater
-        # katkestab lõpus vea-koodiga, sest privaatset allkirjavõtit pole.
-        # Failid on siiski olemas - kontrollime neid järgmises sammus.
+      - name: Tauri build (PROD konf)
         continue-on-error: true
-        env:
-          # Tühi väärtus => tauri ei proovi updater-artefakte allkirjastada
-          TAURI_SIGNING_PRIVATE_KEY: ""
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           cd apps/desktop
-          pnpm tauri build --config src-tauri/tauri.dev.conf.json
+          pnpm tauri build --config src-tauri/tauri.prod.conf.json
 
-      - name: Leia ja kogu .deb + binaar
+      - name: Leia ja kogu paketid
         run: |
           mkdir -p build-output
-          echo "--- otsin bundle väljundeid ---"
+          echo "--- bundle väljundid ---"
           find . -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) 2>/dev/null
-          # Kopeerime .deb (Arch pakendamise allikas)
           find . -type f -name "*.deb" -exec cp {} build-output/ \; 2>/dev/null || true
-          # AppImage varuvariandina
           find . -type f -name "*.AppImage" -exec cp {} build-output/ \; 2>/dev/null || true
           echo "--- kogutud ---"
           ls -la build-output/
-          # Kontrollime, et .deb ikka tekkis (muidu peatame siin selge veaga)
           if ! ls build-output/*.deb >/dev/null 2>&1; then
-            echo "VIGA: .deb faili ei toodetud - build kukkus tegelikult enne pakendamist."
+            echo "VIGA: .deb faili ei toodetud."
             exit 1
           fi
-          echo "OK: .deb on olemas."
+          echo "OK: .deb olemas."
 
-      - name: Laadi build artefaktiks (etapp 2 jaoks)
+      - name: Laadi build artefaktiks
         uses: actions/upload-artifact@v4
         with:
           name: ubuntu-build-output
@@ -104,12 +105,10 @@ jobs:
           if-no-files-found: error
 
   # =================================================================
-  # 2. ETAPP: Pakendamine Arch'i paketiks (.pkg.tar.zst).
-  #    Võtame Ubuntu .deb-i, ekstraktime failid ja makepkg-iga
-  #    teeme korrektse pacman-paigaldatava paketi.
+  # 2. ETAPP: Pakendamine Arch'i paketiks (.pkg.tar.zst)
   # =================================================================
   package-arch:
-    name: Package for Arch
+    name: Package for Arch (prod)
     needs: build-ubuntu
     runs-on: ubuntu-latest
     container:
@@ -118,11 +117,7 @@ jobs:
       - name: Arch tööriistad
         run: |
           pacman -Syu --noconfirm --needed \
-            base-devel \
-            sudo \
-            libarchive \
-            binutils \
-            jq
+            base-devel sudo libarchive binutils jq
 
       - name: Lae alla Ubuntu build
         uses: actions/download-artifact@v4
@@ -130,7 +125,7 @@ jobs:
           name: ubuntu-build-output
           path: build-output
 
-      - name: Loo makepkg kasutaja (makepkg ei jookse root'ina)
+      - name: Loo makepkg kasutaja
         run: |
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -139,33 +134,28 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /home/builder/pkg
-          # Leia .deb fail
           DEB=$(find build-output -name "*.deb" | head -n1)
           if [ -z "$DEB" ]; then
-            echo "VIGA: .deb faili ei leitud!"
-            ls -la build-output/
-            exit 1
+            echo "VIGA: .deb faili ei leitud!"; ls -la build-output/; exit 1
           fi
           echo "Kasutan deb-i: $DEB"
           cp "$DEB" /home/builder/pkg/voquill.deb
 
           PKGVER="0.1.0"
 
-          # Kirjutame PKGBUILD-i ilma YAML-taandeta.
-          # 'PKGEOF' jutumärkides => bash EI interpoleeri; muutujad asendame envsubst'iga hiljem.
-          # Lihtsam: kasutame sed'i, et eemaldada iga rea algusest taane (märgis '|').
           sed 's/^|//' > /home/builder/pkg/PKGBUILD << PKGEOF
           |# Maintainer: kirlis950
-          |pkgname=voquill-desktop-dev
+          |pkgname=voquill-desktop
           |pkgver=${PKGVER}
           |pkgrel=${GITHUB_RUN_NUMBER}
-          |pkgdesc="Voquill - AI voice dictation (dev-flavor, repackaged from upstream .deb)"
+          |pkgdesc="Voquill - AI voice dictation (production)"
           |arch=('x86_64')
           |url="https://github.com/voquill/voquill"
           |license=('AGPL3')
           |depends=(
           |  'webkit2gtk-4.1'
           |  'gtk3'
+          |  'gtk-layer-shell'
           |  'libappindicator-gtk3'
           |  'librsvg'
           |  'alsa-lib'
@@ -180,6 +170,7 @@ jobs:
           |  'wtype: Wayland teksti sisestus'
           |)
           |provides=('voquill')
+          |conflicts=('voquill-desktop-dev')
           |options=('!strip' '!debug')
           |source=('voquill.deb')
           |sha256sums=('SKIP')
@@ -195,39 +186,39 @@ jobs:
           echo "--- PKGBUILD ---"
           cat /home/builder/pkg/PKGBUILD
 
-      - name: makepkg (loo .pkg.tar.zst)
+      - name: makepkg
         run: |
-          cd /home/builder/pkg
-          # --nodeps: ei installi runtime-deps (need on ainult metaandmed lõppkasutajale)
-          # -f: kirjuta üle, --noconfirm: pole interaktiivne
           sudo -u builder bash -c "cd /home/builder/pkg && makepkg -f --nodeps --noconfirm"
           echo "--- valmis paketid ---"
           ls -la /home/builder/pkg/*.pkg.tar.zst
 
-      - name: Kogu pakett release jaoks
+      - name: Kogu release jaoks
         run: |
           mkdir -p release-assets
           cp /home/builder/pkg/*.pkg.tar.zst release-assets/
-          # Lisame ka AppImage'i kui see ehitati (portable variant)
           find build-output -name "*.AppImage" -exec cp {} release-assets/ \; 2>/dev/null || true
           ls -la release-assets/
 
       - name: Release tag
         id: vars
-        run: |
-          echo "tag=arch-v0.1.0-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+        run: echo "tag=arch-prod-v0.1.0-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
-          name: "Voquill Arch pakett ${{ steps.vars.outputs.tag }}"
+          name: "Voquill Arch pakett (PROD) ${{ steps.vars.outputs.tag }}"
           body: |
-            Arch Linuxi pakett (.pkg.tar.zst), pakendatud upstream dev-buildist.
-            Ehitatud ubuntu-22.04 peal, pakendatud archlinux konteineris.
+            Arch Linuxi pakett (.pkg.tar.zst) - PRODUCTION flavor.
+            Ühendub päris Voquill pilve backendiga.
+            Ehitatud ubuntu-22.04, pakendatud archlinux konteineris.
 
             Paigaldus:
-            sudo pacman -U voquill-desktop-dev-*.pkg.tar.zst
+            sudo pacman -U voquill-desktop-*.pkg.tar.zst
+
+            Kui eelnevalt paigaldatud dev-versioon:
+            sudo pacman -R voquill-desktop-dev
+            sudo pacman -U voquill-desktop-*.pkg.tar.zst
 
             Commit: ${{ github.sha }}
           files: release-assets/*
