@@ -87,6 +87,16 @@ type HoldAction = {
         matchesCombo(keysHeld, combo),
         );
 
+        // When keysHeld is empty AND this rail never saw the combo pressed via
+        // keysHeld, this hook has no business touching the controller — it may
+        // be driven entirely by the explicit press/release counter rail (e.g.
+        // an evdev daemon on Wayland, where keysHeld is always empty because
+        // the native key listener is disabled). Resetting here would clobber a
+        // recording that the press/release rail just started.
+        if (keysHeld.length === 0 && !wasPressed) {
+          continue;
+        }
+
         if (isDisabled) {
           wasPressedRef.current.set(action.controller, isPressed);
           action.controller.reset();
