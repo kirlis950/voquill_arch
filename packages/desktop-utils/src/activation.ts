@@ -105,6 +105,27 @@ export class ActivationController {
     }
   }
 
+  /**
+   * Unconditional release for callers that observe genuine hardware
+   * key-up events (e.g. an evdev bridge daemon), as opposed to
+   * `handleRelease()`, which infers tap-vs-hold from elapsed time because
+   * its caller (`keysHeld` polling) can't otherwise tell a quick press
+   * from a deliberate tap-to-lock. When the caller already knows the
+   * physical key was released, that tap/hold inference is unwanted: a
+   * short-but-real hold (e.g. a brief dictated word) would otherwise be
+   * mistaken for a tap and lock recording on instead of stopping it.
+   * Always deactivates if active, regardless of how long the press lasted
+   * or whether a lock is already engaged.
+   */
+  handleHardwareRelease(): void {
+    this.ignoreNextActivation = false;
+    this.lastReleaseTimestamp = Date.now();
+
+    if (!this._isActive) return;
+
+    this.doDeactivate();
+  }
+
   toggle(): void {
     if (this.toggleInProgress) {
       return;
