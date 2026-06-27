@@ -168,29 +168,31 @@ type HoldAction = {
     );
 
     useEffect(() => {
-      if (!isDisabled) {
-        for (const action of actions) {
-          const prevPress =
-          prevPressCountsRef.current.get(action.controller) ?? 0;
-          const currPress = action.pressCount ?? 0;
-          if (currPress > prevPress) {
-            action.controller.handlePress();
-          }
-
-          const prevRelease =
-          prevReleaseCountsRef.current.get(action.controller) ?? 0;
-          const currRelease = action.releaseCount ?? 0;
-          if (currRelease > prevRelease) {
-            action.controller.handleHardwareRelease();
-          }
-        }
-      }
       for (const action of actions) {
-        prevPressCountsRef.current.set(action.controller, action.pressCount ?? 0);
-        prevReleaseCountsRef.current.set(
-          action.controller,
-          action.releaseCount ?? 0,
-        );
+        const prevPress = prevPressCountsRef.current.get(action.controller) ?? 0;
+        const currPress = action.pressCount ?? 0;
+        const prevRelease =
+        prevReleaseCountsRef.current.get(action.controller) ?? 0;
+        const currRelease = action.releaseCount ?? 0;
+
+        // Press is gated by isDisabled: don't start recording on a hotkey
+        // that isn't currently interactable.
+        if (!isDisabled && currPress > prevPress) {
+          action.controller.handlePress();
+        }
+
+        // Release is NOT gated by isDisabled. If a press already started
+        // recording, the matching release must always be able to stop it —
+        // otherwise a flag flipping to disabled between press and release
+        // (e.g. isStopping/activeRecordingMode transitions) would consume the
+        // release as a no-op and leave recording stuck on. handleHardwareRelease
+        // is itself a no-op when the controller isn't active, so this is safe.
+        if (currRelease > prevRelease) {
+          action.controller.handleHardwareRelease();
+        }
+
+        prevPressCountsRef.current.set(action.controller, currPress);
+        prevReleaseCountsRef.current.set(action.controller, currRelease);
       }
     }, [pressReleaseSignature, isDisabled, actions]);
   };
