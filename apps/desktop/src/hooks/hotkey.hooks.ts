@@ -27,6 +27,10 @@ export const useHotkeyHoldMany = (args: {
   const isRecordingHotkey = useAppStore((state) => state.isRecordingHotkey);
   const hotkeyById = useAppStore((state) => state.hotkeyById);
   const hotkeyTriggers = useAppStore((state) => state.hotkeyTriggers);
+  const hotkeyPressTriggers = useAppStore((state) => state.hotkeyPressTriggers);
+  const hotkeyReleaseTriggers = useAppStore(
+    (state) => state.hotkeyReleaseTriggers,
+  );
 
   const combosByAction = useMemo(() => {
     const map: Record<string, string[][]> = {};
@@ -46,8 +50,16 @@ export const useHotkeyHoldMany = (args: {
         controller: action.controller,
         combos: combosByAction[action.actionName] ?? [],
         triggerCount: hotkeyTriggers[action.actionName] ?? 0,
+        pressCount: hotkeyPressTriggers[action.actionName] ?? 0,
+        releaseCount: hotkeyReleaseTriggers[action.actionName] ?? 0,
       })),
-    [args.actions, combosByAction, hotkeyTriggers],
+    [
+      args.actions,
+      combosByAction,
+      hotkeyTriggers,
+      hotkeyPressTriggers,
+      hotkeyReleaseTriggers,
+    ],
   );
 
   useEffect(() => {

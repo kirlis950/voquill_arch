@@ -242,6 +242,26 @@ export const AppSideEffects = () => {
     },
   );
 
+  useTauriListen<BridgeHotkeyTriggerPayload>(
+    "bridge_hotkey_press",
+    (payload) => {
+      produceAppState((draft) => {
+        draft.hotkeyPressTriggers[payload.hotkey] =
+          (draft.hotkeyPressTriggers[payload.hotkey] ?? 0) + 1;
+      });
+    },
+  );
+
+  useTauriListen<BridgeHotkeyTriggerPayload>(
+    "bridge_hotkey_release",
+    (payload) => {
+      produceAppState((draft) => {
+        draft.hotkeyReleaseTriggers[payload.hotkey] =
+          (draft.hotkeyReleaseTriggers[payload.hotkey] ?? 0) + 1;
+      });
+    },
+  );
+
   useTauriListen<KeysHeldPayload>("keys_held", (payload) => {
     const existing = getAppState().keysHeld;
     if (isEqual(existing, payload.keys)) {

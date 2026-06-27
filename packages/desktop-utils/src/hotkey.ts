@@ -5,6 +5,17 @@ type HoldAction = {
   controller: ActivationController;
   combos: string[][];
   triggerCount: number;
+  /**
+   * Optional explicit key-down counter. When this increments, the
+   * controller's `handlePress()` is invoked directly — bypassing the
+   * `keysHeld`/toggle inference entirely. Intended for external callers
+   * (e.g. an evdev-based bridge daemon) that can observe true hardware
+   * press/release events and want genuine hold-to-talk behavior instead
+   * of tap-to-lock.
+   */
+  pressCount?: number;
+  /** Optional explicit key-up counter; pairs with {@link pressCount}. */
+  releaseCount?: number;
 };
 
 export type UseHotkeyHoldManyArgs = {
@@ -19,6 +30,8 @@ export type UseHotkeyHoldArgs = {
   triggerCount: number;
   keysHeld: string[];
   isDisabled?: boolean;
+  pressCount?: number;
+  releaseCount?: number;
 };
 
 export type UseHotkeyFireArgs = {
@@ -133,6 +146,51 @@ export const useHotkeyHoldMany = (args: UseHotkeyHoldManyArgs): void => {
       prevTriggerCountsRef.current.set(action.controller, action.triggerCount);
     }
   }, [triggerSignature, isDisabled, actions]);
+
+  // Explicit press/release counters from callers that can observe true
+  // hardware key state (e.g. an evdev daemon talking to the bridge server).
+  // These call handlePress()/handleRelease() directly, giving genuine
+  // hold-to-talk instead of the tap-to-lock behavior of toggle().
+  const pressReleaseSignature = useMemo(
+    () =>
+      actions
+        .map((a) => `${a.pressCount ?? 0}:${a.releaseCount ?? 0}`)
+        .join(","),
+    [actions],
+  );
+  const prevPressCountsRef = useRef<Map<ActivationController, number>>(
+    new Map(),
+  );
+  const prevReleaseCountsRef = useRef<Map<ActivationController, number>>(
+    new Map(),
+  );
+
+  useEffect(() => {
+    if (!isDisabled) {
+      for (const action of actions) {
+        const prevPress =
+          prevPressCountsRef.current.get(action.controller) ?? 0;
+        const currPress = action.pressCount ?? 0;
+        if (currPress > prevPress) {
+          action.controller.handlePress();
+        }
+
+        const prevRelease =
+          prevReleaseCountsRef.current.get(action.controller) ?? 0;
+        const currRelease = action.releaseCount ?? 0;
+        if (currRelease > prevRelease) {
+          action.controller.handleRelease();
+        }
+      }
+    }
+    for (const action of actions) {
+      prevPressCountsRef.current.set(action.controller, action.pressCount ?? 0);
+      prevReleaseCountsRef.current.set(
+        action.controller,
+        action.releaseCount ?? 0,
+      );
+    }
+  }, [pressReleaseSignature, isDisabled, actions]);
 };
 
 /**
@@ -145,9 +203,17 @@ export const useHotkeyHold = (args: UseHotkeyHoldArgs): void => {
         controller: args.controller,
         combos: args.combos,
         triggerCount: args.triggerCount,
+        pressCount: args.pressCount,
+        releaseCount: args.releaseCount,
       },
     ],
-    [args.controller, args.combos, args.triggerCount],
+    [
+      args.controller,
+      args.combos,
+      args.triggerCount,
+      args.pressCount,
+      args.releaseCount,
+    ],
   );
   useHotkeyHoldMany({
     actions,

@@ -143,6 +143,8 @@ export type AppState = {
 
   overlayCursor: Nullable<Vector2>;
   hotkeyTriggers: Record<string, number>;
+  hotkeyPressTriggers: Record<string, number>;
+  hotkeyReleaseTriggers: Record<string, number>;
   hotkeyStrategy: Nullable<HotkeyStrategy>;
   supportsAppDetection: boolean;
   supportsPasteKeybinds: PasteKeybindSupport;
@@ -194,6 +196,8 @@ export const INITIAL_APP_STATE: AppState = {
   snackbarTransitionDuration: undefined,
   overlayCursor: null,
   hotkeyTriggers: {},
+  hotkeyPressTriggers: {},
+  hotkeyReleaseTriggers: {},
   hotkeyStrategy: null,
   supportsAppDetection: true,
   supportsPasteKeybinds: "disabled",

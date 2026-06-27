@@ -5,6 +5,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
 pub const EVT_BRIDGE_HOTKEY_TRIGGER: &str = "bridge_hotkey_trigger";
+pub const EVT_BRIDGE_HOTKEY_PRESS: &str = "bridge_hotkey_press";
+pub const EVT_BRIDGE_HOTKEY_RELEASE: &str = "bridge_hotkey_release";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BridgeHotkeyTriggerPayload {
@@ -107,18 +109,38 @@ async fn handle_connection(stream: tokio::net::TcpStream, app: AppHandle) -> Res
         return write_response(&mut writer, 405, "Method Not Allowed").await;
     }
 
-    let hotkey = match path.strip_prefix("/hotkey/") {
-        Some(name) if !name.is_empty() && !name.contains('/') => name,
+    let remainder = match path.strip_prefix("/hotkey/") {
+        Some(remainder) if !remainder.is_empty() => remainder,
         _ => return write_response(&mut writer, 404, "Not Found").await,
+    };
+
+    // Supports three forms:
+    //   /hotkey/{action}          -> legacy toggle (single trigger event)
+    //   /hotkey/{action}/press    -> explicit key-down (for true hold/release callers)
+    //   /hotkey/{action}/release  -> explicit key-up
+    let (hotkey, event_name, log_verb) = if let Some(name) = remainder.strip_suffix("/press") {
+        if name.is_empty() || name.contains('/') {
+            return write_response(&mut writer, 404, "Not Found").await;
+        }
+        (name, EVT_BRIDGE_HOTKEY_PRESS, "pressed")
+    } else if let Some(name) = remainder.strip_suffix("/release") {
+        if name.is_empty() || name.contains('/') {
+            return write_response(&mut writer, 404, "Not Found").await;
+        }
+        (name, EVT_BRIDGE_HOTKEY_RELEASE, "released")
+    } else if !remainder.contains('/') {
+        (remainder, EVT_BRIDGE_HOTKEY_TRIGGER, "triggered")
+    } else {
+        return write_response(&mut writer, 404, "Not Found").await;
     };
 
     let payload = BridgeHotkeyTriggerPayload {
         hotkey: hotkey.to_string(),
     };
 
-    match app.emit(EVT_BRIDGE_HOTKEY_TRIGGER, &payload) {
+    match app.emit(event_name, &payload) {
         Ok(()) => {
-            log::info!("Bridge hotkey triggered: {hotkey}");
+            log::info!("Bridge hotkey {log_verb}: {hotkey}");
             write_response(&mut writer, 200, "OK").await
         }
         Err(err) => {
